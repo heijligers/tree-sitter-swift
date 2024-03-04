@@ -15,7 +15,7 @@ To use this parser to parse Swift code, you'll want to depend on either the Rust
 To use the Rust crate, you'll add this to your `Cargo.toml`:
 ```
 tree-sitter = "0.20.4"
-tree-sitter-swift = "=0.4.0"
+tree-sitter-swift = "=0.4.1"
 ```
 
 Then you can use a `tree-sitter` parser with the language declared here:
@@ -35,7 +35,7 @@ let tree = parser.parse(&my_source_code, None)
 To use this from NPM, you'll add similar dependencies to `package.json`:
 ```
 "dependencies: {
-  "tree-sitter-swift": "0.4.0",
+  "tree-sitter-swift": "0.4.1",
   "tree-sitter": "^0.20.0"
 }
 ```
@@ -66,10 +66,9 @@ substitute `tree-sitter test` directly.
 
 ## Contributions
 
-If you have a change to make to this parser, and the change is a net positive, please submit a pull request. I mostly
-started this parser to teach myself how `tree-sitter` works, and how to write a grammar, so I welcome improvements. If
-you have an issue with the parser, please file a bug and include a test case to put in the `corpus`. I can't promise any
-level of support, but having the test case makes it more likely that I want to tinker with it.
+All contributions to this repository are welcome.
+
+If said contribution is to check generated files (e.g., `parser.c`) into the repository, be aware that your contribution will not be accepted. Make sure to read the [FAQ entry](https://github.com/alex-pinkus/tree-sitter-swift?tab=readme-ov-file#where-is-your-parserc) and the [prior](https://github.com/alex-pinkus/tree-sitter-swift/issues/362) [discussions](https://github.com/alex-pinkus/tree-sitter-swift/pull/315) and [compromises](https://github.com/alex-pinkus/tree-sitter-swift/issues/149) that have occurred already on this topic.
 
 ## Using tree-sitter-swift in Web Assembly 
 To use tree-sitter-swift as a language for the web bindings version  tree-sitter, which will likely be a more modern version than the published node

@@ -180,6 +180,20 @@ module.exports = grammar({
     // SE-0380: if/switch expressions
     [$._expression, $.if_statement],
     [$._expression, $.switch_statement],
+
+    // Intentionally introduce a conflict for willSet/didSet. That's because if the parser sees a property declared as:
+    // ```
+    // let prop = value {
+    // ```
+    // it will interpret that token as a function call with a trailing lambda parameter before it has the chance to look
+    // for a `willSet` or `didSet`. To figure out the actual meaning, it must continue parsing and allowing both
+    // interpretations to see what it encounters after that.
+    [$.willset_didset_block],
+    [$._expression_without_willset_didset, $._expression_with_willset_didset],
+
+    // `borrowing` and `consuming` are legal as identifiers, but are also legal modifiers
+    [$.simple_identifier, $.parameter_modifier],
+    [$.parameter_modifiers],
   ],
   extras: ($) => [
     $.comment,
@@ -273,7 +287,8 @@ module.exports = grammar({
         /\$[0-9]+/,
         token(seq("$", LEXICAL_IDENTIFIER)),
         "actor",
-        "lazy"
+        "lazy",
+        $._parameter_ownership_modifier
       ),
     identifier: ($) => sep1($.simple_identifier, $._dot),
     // Literals
@@ -418,7 +433,10 @@ module.exports = grammar({
         )
       ),
     tuple_type: ($) =>
-      seq("(", optional(sep1(field("element", $.tuple_type_item), ",")), ")"),
+      choice(
+        seq("(", optional(sep1(field("element", $.tuple_type_item), ",")), ")"),
+        alias($._parenthesized_type, $.tuple_type_item)
+      ),
     tuple_type_item: ($) =>
       prec(
         PRECS.expr,
@@ -524,7 +542,10 @@ module.exports = grammar({
     _parenthesized_type: ($) =>
       seq(
         "(",
-        choice($.opaque_type, $.existential_type, $.dictionary_type),
+        field(
+          "element",
+          choice($.opaque_type, $.existential_type, $.dictionary_type)
+        ),
         ")"
       ),
     navigation_expression: ($) =>
@@ -1074,7 +1095,8 @@ module.exports = grammar({
       ),
     _try_operator_type: ($) =>
       choice(token.immediate("!"), token.immediate("?")),
-    _assignment_and_operator: ($) => choice("+=", "-=", "*=", "/=", "%=", "="),
+    _assignment_and_operator: ($) =>
+      choice("+=", "-=", "*=", "/=", "%=", $._equal_sign),
     _equality_operator: ($) => choice("!=", "!==", $._eq_eq, "==="),
     _comparison_operator: ($) => choice("<", ">", "<=", ">="),
     _three_dot_operator: ($) => alias("...", "..."), // Weird alias to satisfy highlight queries
@@ -1327,16 +1349,50 @@ module.exports = grammar({
         )
       ),
     _single_modifierless_property_declaration: ($) =>
-      seq(
-        field("name", alias($._no_expr_pattern_already_bound, $.pattern)),
-        optional($.type_annotation),
-        optional($.type_constraints),
-        optional(
-          choice(
-            seq($._equal_sign, field("value", $._expression)),
-            field("computed_value", $.computed_property)
+      prec.left(
+        seq(
+          field("name", alias($._no_expr_pattern_already_bound, $.pattern)),
+          optional($.type_annotation),
+          optional($.type_constraints),
+          optional(
+            choice(
+              $._expression_with_willset_didset,
+              $._expression_without_willset_didset,
+              $.willset_didset_block,
+              field("computed_value", $.computed_property)
+            )
           )
         )
+      ),
+    _expression_with_willset_didset: ($) =>
+      prec.dynamic(
+        1,
+        seq(
+          $._equal_sign,
+          field("value", $._expression),
+          $.willset_didset_block
+        )
+      ),
+    _expression_without_willset_didset: ($) =>
+      seq($._equal_sign, field("value", $._expression)),
+    willset_didset_block: ($) =>
+      choice(
+        seq("{", $.willset_clause, optional($.didset_clause), "}"),
+        seq("{", $.didset_clause, optional($.willset_clause), "}")
+      ),
+    willset_clause: ($) =>
+      seq(
+        optional($.modifiers),
+        "willSet",
+        optional(seq("(", $.simple_identifier, ")")),
+        $._block
+      ),
+    didset_clause: ($) =>
+      seq(
+        optional($.modifiers),
+        "didSet",
+        optional(seq("(", $.simple_identifier, ")")),
+        $._block
       ),
     typealias_declaration: ($) =>
       seq(optional($.modifiers), $._modifierless_typealias_declaration),
@@ -1805,7 +1861,9 @@ module.exports = grammar({
     // ==========
     modifiers: ($) =>
       repeat1(
-        choice($._non_local_scope_modifier, $._locally_permitted_modifiers)
+        prec.left(
+          choice($._non_local_scope_modifier, $._locally_permitted_modifiers)
+        )
       ),
     _locally_permitted_modifiers: ($) =>
       repeat1(choice($.attribute, $._locally_permitted_modifier)),
@@ -1841,9 +1899,16 @@ module.exports = grammar({
     mutation_modifier: ($) => choice("mutating", "nonmutating"),
     property_modifier: ($) => choice("static", "dynamic", "optional", "class"),
     inheritance_modifier: ($) => choice("final"),
-    parameter_modifier: ($) => choice("inout", "@escaping", "@autoclosure"),
+    parameter_modifier: ($) =>
+      choice(
+        "inout",
+        "@escaping",
+        "@autoclosure",
+        $._parameter_ownership_modifier
+      ),
     ownership_modifier: ($) =>
       choice("weak", "unowned", "unowned(safe)", "unowned(unsafe)"),
+    _parameter_ownership_modifier: ($) => choice("borrowing", "consuming"),
     use_site_target: ($) =>
       seq(
         choice(
